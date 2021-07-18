@@ -36,6 +36,11 @@ def balancer():
 def main():
 
     client = docker.from_env()
+    print(client.images.list())
+    
+
+
+    return
     
     loadbalancerThread = threading.Thread(target=balancer)
     loadbalancerThread.daemon = True
