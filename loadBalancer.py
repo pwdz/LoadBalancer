@@ -5,7 +5,7 @@ import time
 import os
 
 requestsQueue = []
-last_id = 0
+last_id = int(time.time()) % 100000
 
 def parse(request):
     global requestsQueue
@@ -51,27 +51,32 @@ def balancer():
             print(curr_reqid, output_dir)
             for command in curr_request:
                 cmd_name ,inputfile_path = command
-                print("###############")
+
                 copy_file(inputfile_path, id)
-                print("iiiiiiiiii###############")
+
                 file_name = os.path.basename(inputfile_path)
-                exec_command(container, cmd_name, file_name)
-
-            
-
-            #print(client)
+                exec_command(container, curr_reqid, cmd_name, file_name, output_dir)
     
 def copy_file(inputfile_path, container_id):
     copy_file_command = "docker cp " + inputfile_path + " " + container_id + ":/home/loadBalancer/in"
     print("copy command:", copy_file_command)
-    a = os.system(copy_file_command)
-    print(a)
+    status_code = os.system(copy_file_command)
+    print("copy status code:", status_code)
 
-def exec_command(container, cmd_name, file_name):
-    exec_command_str = "python fileProcessor.py " + cmd_name + " " + "./in/" + file_name
+def exec_command(container, reqid, cmd_name, inputfile_name, output_dir):
+    exec_command_str = "python fileProcessor.py " + cmd_name + " " + "./in/" + inputfile_name
     print("exec string:", exec_command_str)
-    ou = container.exec_run(exec_command_str, stdout=True)
-    print(ou)
+    
+    #output: a tuple of (exit_code, output)
+    status_code, output_bytes = container.exec_run(exec_command_str, stdout=True)
+    print(status_code, output_bytes)
+
+    if status_code == 0: 
+        outputfile_name = cmd_name + str(reqid) + ".txt"
+        outputfile = open(output_dir + "/" + outputfile_name, "w")
+
+        outputfile.write(output_bytes.decode("utf-8"))
+        outputfile.close()
 
 
 def main():
