@@ -6,6 +6,7 @@ import os
 
 requestsQueue = []
 last_id = int(time.time()) % 100000
+command_names = ['max', 'min', 'average', 'sort', 'wordcount']
 
 def parse(request):
     global requestsQueue
@@ -38,7 +39,7 @@ def balancer():
     #container = client.containers.run('loadbalancer/test:v1', detach=True, )
     #print(container.id)
     print(client.images.list())
-    id= "729287d05935"
+    id= "8412ff7239a5"
     container = client.containers.get(id)
 
     while True:
@@ -54,8 +55,11 @@ def balancer():
 
                 copy_file(inputfile_path, id)
 
-                file_name = os.path.basename(inputfile_path)
-                exec_command(container, curr_reqid, cmd_name, file_name, output_dir)
+                filename = os.path.basename(inputfile_path)
+                if cmd_name in command_names:
+                    exec_command(container, curr_reqid, cmd_name, filename, output_dir)
+                else:
+                    exec_program(container, cmd_name, filename, output_dir)
     
 def copy_file(inputfile_path, container_id):
     copy_file_command = "docker cp " + inputfile_path + " " + container_id + ":/home/loadBalancer/in"
@@ -78,6 +82,29 @@ def exec_command(container, reqid, cmd_name, inputfile_name, output_dir):
         outputfile.write(output_bytes.decode("utf-8"))
         outputfile.close()
 
+def exec_program(container, program_name, filename, output_dir):
+    print(program_name, filename)
+    exec_commands = [
+        'mkdir ./in/temp',
+        'g++ ./in/' + filename + ' -o ./in/temp/prog.o',
+        './in/temp/prog.o',
+        'rm -r -f ./in/temp'
+    ]
+
+    for cmd in exec_commands:
+        if cmd.startswith("."): 
+            status_code, output_bytes = container.exec_run(cmd, stdout=True)
+            if status_code == 0:
+                outputfile_name = program_name + ".out"
+                outputfile = open(output_dir + "/" + outputfile_name, "w")
+
+                outputfile.write(output_bytes.decode("utf-8"))  
+                outputfile.close()
+           
+        else:
+            container.exec_run(cmd)
+
+    
 
 def main():
     
