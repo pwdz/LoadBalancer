@@ -6,9 +6,10 @@ import os
 
 requestsQueue = []
 last_id = int(time.time()) % 100000
-containerDic = {}
+containers = []
+pool = []
 command_names = ['max', 'min', 'average', 'sort', 'wordcount']
-
+client = docker.from_env()
 def parse(request):
     global requestsQueue
     global last_id
@@ -31,33 +32,39 @@ def parse(request):
 
 
 def makeContainers(client):
-
+    print("AVAILABLE CONTAINERS:")
     for i in range(3):
-        container = client.containers.run("loadbalancer/fileprocessor:v1.0", detach=True, tty=True)
-        containerDic[container.id] = True
+        container = client.containers.run("loadbalancer/losers:version1.0", detach=True, tty=True)
+        containers.append(container.id)
+        pool.append(container.id)
+        print(container.name)
 
-    return containerDic
+    return pool
 
 
 def balancer():
-    client = docker.from_env()
+
     makeContainers(client)
 
     while True:
         if len(requestsQueue) > 0:
-            idle = None
+
 
             curr_request = requestsQueue.pop(0)
             curr_reqid = curr_request.pop(0)
             output_dir = curr_request.pop(-1)
 
-            print(curr_reqid, output_dir)
+            # print(curr_reqid, output_dir)
             for command in curr_request:
+                idle = None
                 while not idle:
-                    for container in containerDic.keys():
-                        if containerDic[container] == True:
-                            idle = container
-                            break
+                    if len(pool)!= 0:
+                        idle =pool.pop()
+                    #
+                    # for container in pool.keys():
+                    #     if pool[container] == True:
+                    #         idle = container
+                    #         break
                 cmd_name ,inputfile_path = command
 
                 copy_file(inputfile_path, str(idle))
@@ -67,67 +74,65 @@ def balancer():
 
                 if cmd_name in command_names:
                     containerThread = threading.Thread(target=exec_command, args=(container,curr_reqid,cmd_name, file_name,output_dir,))
-                    containerThread.daemon = True
-                    containerThread.start()
-
-
                 else:
                     containerThread = threading.Thread(target=exec_program, args=(container, cmd_name, file_name,output_dir,))
-                    containerThread.daemon = True
-                    containerThread.start()
+
+                containerThread.daemon = True
+                containerThread.start()
 
 
 def copy_file(inputfile_path, container_id):
     copy_file_command = "docker cp " + inputfile_path + " " + container_id + ":/home/loadBalancer/in"
-    print("copy command:", copy_file_command)
     status_code = os.system(copy_file_command)
-    print("copy status code:", status_code)
+
 
 def exec_command(container, reqid, cmd_name, inputfile_name, output_dir):
     exec_command_str = "python fileProcessor.py " + cmd_name + " " + "./in/" + inputfile_name
-    print("exec string:", exec_command_str)
-    containerDic[container.id] =False
-    print("heyyyy",container.id)
+    print("container name: "+container.name+" exec string: "+ exec_command_str)
     status_code, output_bytes = container.exec_run(exec_command_str, stdout=True)
-    print(status_code, output_bytes)
 
     if status_code == 0:
         outputfile_name = cmd_name + str(reqid) + ".txt"
         outputfile = open(output_dir + "/" + outputfile_name, "w")
-
         outputfile.write(output_bytes.decode("utf-8"))
         outputfile.close()
+        print(cmd_name+" from request "+str(reqid)+" ready in "+ output_dir+"/"+outputfile_name)
 
-    containerDic[container.id] = True
+    pool.append(container.id)
 
 def exec_program(container, program_name, filename, output_dir):
+    # container.commit(repository=, tag=None)
+    container.exec_run('mkdir ./in/temp')
+    container.exec_run('mv ./in/'+filename+' ./in/temp')
+    file, extension = os.path.splitext('./in/' + filename)
+    cmd = ''
+    if extension == '.cpp':
+        container.exec_run('g++ ./in/temp/' + filename + ' -o ./in/temp/prog.o', stdout=True)
+        cmd = './in/temp/prog.o'
+    elif extension =='.py':
+        cmd = 'python3 ./in/temp/'+filename
 
-    containerDic[container.id] =False
+    print("container name: " + container.name + " executing file: " + program_name)
 
-    exec_commands = [
-        'mkdir ./in/temp',
-        'g++ ./in/' + filename + ' -o ./in/temp/prog.o',
-        './in/temp/prog.o',
-        'rm -r -f ./in/temp'
-    ]
+    status_code, output_bytes = container.exec_run(cmd, stdout=True)
+    if status_code == 0:
+            outputfile_name = program_name + ".out"
+            outputfile = open(output_dir + "/" + outputfile_name, "w")
+            outputfile.write(output_bytes.decode("utf-8"))
+            outputfile.close()
+            print("results of "+program_name+" ready in " + output_dir + "/" + outputfile_name)
 
-    for cmd in exec_commands:
-        if cmd.startswith("."): 
-            status_code, output_bytes = container.exec_run(cmd, stdout=True)
-            if status_code == 0:
-                outputfile_name = program_name + ".out"
-                outputfile = open(output_dir + "/" + outputfile_name, "w")
+    container.exec_run('rm -r -f ./in/temp')
 
-                outputfile.write(output_bytes.decode("utf-8"))  
-                outputfile.close()
-           
-        else:
-            container.exec_run(cmd)
+    pool.append(container.id)
 
-    containerDic[container.id] = True
-
+def cleanup():
+    for container in containers:
+        con = client.containers.get(container)
+        con.remove(force=True)
 
 def main():
+    print(">> WELCOME TO THE ULTIMATE LOADBALANCER PROGRAM")
     loadbalancerThread = threading.Thread(target=balancer)
     loadbalancerThread.daemon = True
     loadbalancerThread.start()
@@ -135,7 +140,7 @@ def main():
     while True:
         request = input()
         if request == 'end':
-            print(requestsQueue)
+            cleanup()
             sys.exit()
 
         else:
