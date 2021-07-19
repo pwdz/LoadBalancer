@@ -3,3 +3,4 @@ venv/
 out/
 in/
 *.swp
+*.txt

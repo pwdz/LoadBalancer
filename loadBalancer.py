@@ -6,6 +6,7 @@ import os
 
 requestsQueue = []
 last_id = int(time.time()) % 100000
+containerDic = {}
 command_names = ['max', 'min', 'average', 'sort', 'wordcount']
 
 def parse(request):
@@ -28,39 +29,54 @@ def parse(request):
     requestsQueue.append(tmp)
     return tmp
 
+
+def makeContainers(client):
+
+    for i in range(3):
+        container = client.containers.run("loadbalancer/fileprocessor:v1.0", detach=True, tty=True)
+        containerDic[container.id] = True
+
+    return containerDic
+
+
 def balancer():
-    #write your code from here
-    # tasks in requestsQueue
-    # format of each task: [id,req1, req2, ..., reqn, outputdirectory]
-    # format of each request: [method, inputFile]
-    
-    
     client = docker.from_env()
-    #container = client.containers.run('loadbalancer/test:v1', detach=True, )
-    #print(container.id)
-    print(client.images.list())
-    id= "8412ff7239a5"
-    container = client.containers.get(id)
+    makeContainers(client)
 
     while True:
         if len(requestsQueue) > 0:
+            idle = None
 
             curr_request = requestsQueue.pop(0)
             curr_reqid = curr_request.pop(0)
             output_dir = curr_request.pop(-1)
-            
+
             print(curr_reqid, output_dir)
             for command in curr_request:
+                while not idle:
+                    for container in containerDic.keys():
+                        if containerDic[container] == True:
+                            idle = container
+                            break
                 cmd_name ,inputfile_path = command
 
-                copy_file(inputfile_path, id)
+                copy_file(inputfile_path, str(idle))
+                file_name = os.path.basename(inputfile_path)
 
-                filename = os.path.basename(inputfile_path)
+                container = client.containers.get(idle)
+
                 if cmd_name in command_names:
-                    exec_command(container, curr_reqid, cmd_name, filename, output_dir)
+                    containerThread = threading.Thread(target=exec_command, args=(container,curr_reqid,cmd_name, file_name,output_dir,))
+                    containerThread.daemon = True
+                    containerThread.start()
+
+
                 else:
-                    exec_program(container, cmd_name, filename, output_dir)
-    
+                    containerThread = threading.Thread(target=exec_program, args=(container, cmd_name, file_name,output_dir,))
+                    containerThread.daemon = True
+                    containerThread.start()
+
+
 def copy_file(inputfile_path, container_id):
     copy_file_command = "docker cp " + inputfile_path + " " + container_id + ":/home/loadBalancer/in"
     print("copy command:", copy_file_command)
@@ -70,20 +86,24 @@ def copy_file(inputfile_path, container_id):
 def exec_command(container, reqid, cmd_name, inputfile_name, output_dir):
     exec_command_str = "python fileProcessor.py " + cmd_name + " " + "./in/" + inputfile_name
     print("exec string:", exec_command_str)
-    
-    #output: a tuple of (exit_code, output)
+    containerDic[container.id] =False
+    print("heyyyy",container.id)
     status_code, output_bytes = container.exec_run(exec_command_str, stdout=True)
     print(status_code, output_bytes)
 
-    if status_code == 0: 
+    if status_code == 0:
         outputfile_name = cmd_name + str(reqid) + ".txt"
         outputfile = open(output_dir + "/" + outputfile_name, "w")
 
         outputfile.write(output_bytes.decode("utf-8"))
         outputfile.close()
 
+    containerDic[container.id] = True
+
 def exec_program(container, program_name, filename, output_dir):
-    print(program_name, filename)
+
+    containerDic[container.id] =False
+
     exec_commands = [
         'mkdir ./in/temp',
         'g++ ./in/' + filename + ' -o ./in/temp/prog.o',
@@ -104,10 +124,10 @@ def exec_program(container, program_name, filename, output_dir):
         else:
             container.exec_run(cmd)
 
-    
+    containerDic[container.id] = True
+
 
 def main():
-    
     loadbalancerThread = threading.Thread(target=balancer)
     loadbalancerThread.daemon = True
     loadbalancerThread.start()

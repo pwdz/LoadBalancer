@@ -1,4 +1,5 @@
 import sys
+import time
 def getNums(fileData):
     numbers = []
     for num in fileData:
@@ -38,6 +39,7 @@ def wordCount(fileData):
 def main():
     func = sys.argv[1]
     inputPath = sys.argv[2]
+    time.sleep(6)
     fileData = open(inputPath, 'r')
     if func == 'min':
         result = minCalculator(fileData)
