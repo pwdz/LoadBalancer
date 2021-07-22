@@ -43,16 +43,23 @@ def main():
     fileData = open(inputPath, 'r')
     if func == 'min':
         result = minCalculator(fileData)
+        print(result)
     if func == 'max':
         result =  maxCalculator(fileData)
+        print(result)
     if func =='average':
         result = averageCalculator(fileData)
+        print(result)
     if func =='sort':
         result = sortNum(fileData)
+        for i in result:
+            print(str(i))
 
     if func =='wordcount':
         result = wordCount(fileData)
-    print(result)
+        for key in result.keys():
+            print(str(key)+'    '+str(result[key]))
+
 
 if __name__ == '__main__':
     main()
