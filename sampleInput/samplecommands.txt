@@ -1,0 +1,4 @@
+{<min,/home/pwdz/LoadBalancer/in/grade.txt>, </home/pwdz/LoadBalancer/out>}
+{<average,/home/pwdz/LoadBalancer/in/grade.txt>, <max, /home/pwdz/LoadBalancer/in/grade.txt>, </home/pwdz/LoadBalancer/out>}
+{<sort,/home/pwdz/LoadBalancer/in/grade.txt>, <wordcount, /home/pwdz/LoadBalancer/in/test.txt>, </home/pwdz/LoadBalancer/out>}
+{<min,/home/pwdz/LoadBalancer/in/grade.txt>, <myCppProgram,/home/pwdz/LoadBalancer/in/a.cpp>, </home/pwdz/LoadBalancer/out>}
