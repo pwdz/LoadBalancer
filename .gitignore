@@ -1,6 +1,4 @@
 venv/
 .idea/
-out/
-in/
 *.swp
 *.txt
