@@ -1,3 +1,4 @@
+![workflow](https://github.com/pwdz/LoadBalancer/actions/workflows/docker-build.yml/badge.svg)
 # LoadBalancer
 A simple loadbalancer for Cloud Computing course at AUT.  
 
